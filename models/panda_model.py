@@ -1,4 +1,5 @@
 import roboticstoolbox as rtb
+import numpy as np
 from spatialmath import SE3
 from typing import Union
 import os
@@ -21,17 +22,14 @@ def create_virtual_panda(urdf_path: Union[str, None] = None) -> rtb.models.Panda
     panda = rtb.models.Panda()
     panda_virtual = rtb.Robot.URDF(urdf_path, 'panda_hand')
 
-    if panda_virtual._getlink('panda_finger_virtual') is not None:
-        virtual_link = panda_virtual.link_dict['panda_finger_virtual']
-        panda.link_dict['panda_finger_virtual'] = virtual_link
-        panda.grippers[0].links.append(virtual_link)
-        panda.grippers[0].links[0].children.append(virtual_link)
-    else:
-        print("Warning: 'panda_finger_virtual' link not found in the URDF.")
+    panda_virtual.addconfiguration('qr', np.append(panda.qr, 0))
+    panda_virtual.addconfiguration('qz', np.append(panda.qz, 0))
+    panda_virtual.qr = np.append(panda.qr, 0)
+    panda_virtual.qz = np.append(panda.qz, 0)
 
-
+    panda_virtual.q = panda_virtual.qr
 
     #rebuild the ETS.
-    panda.ets()
+    panda_virtual.ets()
 
-    return panda
+    return panda_virtual
