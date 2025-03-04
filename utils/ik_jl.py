@@ -99,7 +99,7 @@ class IK_JL(IKSolver):
         seed: Union[int, None] = None,
         K: Union[ArrayLike, float, None] = 1.0,
         k0: Union[ArrayLike, float, None] = 0.1,
-        𝒱ep: ArrayLike = np.zeros(6),
+        𝒱ep: ArrayLike = np.empty(6),
         **kwargs,
     ):
         super().__init__(
@@ -145,17 +145,20 @@ class IK_JL(IKSolver):
         e, E = self.error(Te, Tep)
 
         J = ets.jacob0(q)
+        J_pinv = np.linalg.pinv(J)
 
         # Calculate joint limit avoidance term
         dw_dq = self._calculate_dw_dq(ets, q)
+        
         q0 = self.k0 * dw_dq
 
         # Calculate joint velocities
         
 
-        q_dot = J.T @ (self.Vep + self.K * e) + (np.eye(ets.n) - np.linalg.pinv(J) @ J) @ q0
+        q_dot = J_pinv @ (self.Vep + self.K * e) + (np.eye(ets.n) - J_pinv @ J) @ q0
 
         # Update joint positions
+        
         q[ets.jindices] += q_dot
 
         return E, q[ets.jindices]
@@ -178,11 +181,16 @@ class IK_JL(IKSolver):
         """
         n = ets.n
         qlim = ets.qlim
+        
         q_mid = (qlim[1] + qlim[0]) / 2
         q_range = qlim[1] - qlim[0]
-
-        dw_dq = np.zeros(n)
-        for i in range(n):
-            dw_dq[i] = -(q[i] - q_mid[i]) / (q_range[i] / 2)**2
-
+        
+        # Vectorized calculation with singularity protection
+        with np.errstate(divide='ignore', invalid='ignore'):
+            dw_dq = -1/n * (q - q_mid) / (q_range / 2)**2
+            
+        # Handle unlimited joints (range = 0)
+        dw_dq[np.isinf(dw_dq)] = 0  
+        dw_dq[np.isnan(dw_dq)] = 0
+        
         return dw_dq
