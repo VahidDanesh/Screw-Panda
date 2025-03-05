@@ -99,7 +99,7 @@ class IK_JL(IKSolver):
         seed: Union[int, None] = None,
         K: Union[ArrayLike, float, None] = 1.0,
         k0: Union[ArrayLike, float, None] = 0.1,
-        𝒱ep: ArrayLike = np.empty(6),
+        𝒱ep: ArrayLike = np.zeros(6),
         **kwargs,
     ):
         super().__init__(
