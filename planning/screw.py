@@ -35,7 +35,7 @@ class Screw:
         norm_u = np.linalg.norm(self.u)
         if abs(norm_u - 1.0) > 1e-10:
             self.u = self.u / norm_u
-            
+        
         if m is not None:
             self.m = np.array(m, dtype=float)
             self.r = None  # We don't calculate r from m automatically
@@ -46,7 +46,17 @@ class Screw:
             raise ValueError("Either r or m must be provided")
 
     def __repr__(self):
-        return f"Screw(theta={self.theta}, d={self.d}, u={self.u}, m={self.m})"
+        return str(self)
+    
+    def __str__(self):
+        """
+        String representation of the screw motion.
+        Returns:
+            str: A string describing the screw motion
+        """
+        return "Screw(theta={}, d={}, u={}, m={})".format(
+            self.theta, self.d, self.u, self.m
+        )
 
 
     def dquat(self):
@@ -69,10 +79,22 @@ class Screw:
         # Dual part
         qd_scalar = -d/2 * np.sin(theta / 2)
         qd_vector = d/2 * np.cos(theta / 2) * u + np.sin(theta / 2) * m
-
         qd = Quaternion(np.r_[qd_scalar, qd_vector])
         
         return UnitDualQuaternion(qr, qd)
+    
+    def sclerp(self, dq2, s):
+        """
+        Screw Linear Interpolation (ScLERP) between this screw and another unit dual quaternion.
+        
+        Args:
+            dq2 (UnitDualQuaternion): Ending configuration
+            s (float or numpy.ndarray): Interpolation parameter(s) in range [0, 1]
+            
+        Returns:
+            UnitDualQuaternion or list: Interpolated configuration(s)
+        """
+        return sclerp(self.dquat(), dq2, s)
     
 def sclerp(dq1, dq2, s):
     """
@@ -80,7 +102,7 @@ def sclerp(dq1, dq2, s):
     
     The smooth path in SE(3) provided by ScLERP is given by D(s) = D_1 * D_12^s,
     where s ∈ [0, 1] is a scalar path parameter, and D_12 is the transformation
-    of configuration 2 relative to configuration 1.
+    of configuration 2 relative to configuration 1. 
     
     Args:
         dq1 (UnitDualQuaternion): Starting configuration
@@ -91,6 +113,7 @@ def sclerp(dq1, dq2, s):
         UnitDualQuaternion or list: Interpolated configuration(s)
     """
     # Handle array input for s
+    
     if isinstance(s, np.ndarray):
         return [sclerp(dq1, dq2, si) for si in s]
     
