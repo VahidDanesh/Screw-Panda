@@ -73,6 +73,46 @@ class Screw:
         qd = Quaternion(np.r_[qd_scalar, qd_vector])
         
         return UnitDualQuaternion(qr, qd)
+    
+def sclerp(dq1, dq2, s):
+    """
+    Screw Linear Interpolation (ScLERP) between two unit dual quaternions.
+    
+    The smooth path in SE(3) provided by ScLERP is given by D(s) = D_1 * D_12^s,
+    where s ∈ [0, 1] is a scalar path parameter, and D_12 is the transformation
+    of configuration 2 relative to configuration 1.
+    
+    Args:
+        dq1 (UnitDualQuaternion): Starting configuration
+        dq2 (UnitDualQuaternion): Ending configuration
+        s (float or numpy.ndarray): Interpolation parameter(s) in range [0, 1]
+        
+    Returns:
+        UnitDualQuaternion or list: Interpolated configuration(s)
+    """
+    # Handle array input for s
+    if isinstance(s, np.ndarray):
+        return [sclerp(dq1, dq2, si) for si in s]
+    
+    # Calculate the relative transformation from dq1 to dq2
+    dq12 = dq1.conj() * dq2
+    
+    # Extract screw parameters from dq12
+    screw12 = dual_quaternion_to_screw(dq12)
+    
+    # Create a new screw with scaled parameters
+    scaled_screw = Screw(
+        theta=s * screw12.theta,
+        d=s * screw12.d,
+        u=screw12.u,
+        m=screw12.m
+    )
+    
+    # Convert scaled screw to dual quaternion
+    dq12_s = scaled_screw.dquat()
+    
+    # Apply the scaled transformation to dq1
+    return dq1 * dq12_s
 
 
 def dual_quaternion_to_screw(dq):
