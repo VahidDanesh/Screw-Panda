@@ -1,5 +1,5 @@
 import numpy as np
-from spatialmath import SE3, UnitQuaternion
+from spatialmath import SE3, SO3, UnitQuaternion, DualQuaternion
 from spatialgeometry import Cuboid, Cylinder, Shape
 import pytransform3d.rotations as pr3d
 import pytransform3d.transformations as pt3d
@@ -203,7 +203,7 @@ class Box(SpatialObject):
         Get the pose at a contact point along an edge.
         
         Args:
-            edge_idx (int): Index of the edge to contact (0-11).
+            edge_idx (int): Index of the edge to contact (1-12).
             contact_param (float): Parameter along the edge (0 = start, 1 = end, 0.5 = middle).
             
         Returns:
@@ -217,7 +217,7 @@ class Box(SpatialObject):
         # TODO: Calculate orientation based on edge direction
         
         # For now, just use object orientation
-        return SE3(contact_point) * SE3(R=self.orientation)
+        return SE3(contact_point) * SE3(SO3(self.orientation))
 
 
 class Cylinder(SpatialObject):
