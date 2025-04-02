@@ -4,6 +4,7 @@ from spatialgeometry import Cuboid, Cylinder, Shape
 import pytransform3d.rotations as pr3d
 import pytransform3d.transformations as pt3d
 import pytransform3d.coordinates as pc3d
+from .utils import vec_angle
 
 class SpatialObject:
     """
@@ -81,7 +82,7 @@ class SpatialObject:
         return self
 
 
-class Box(SpatialObject):
+class ManipulableBox(SpatialObject):
     """
     A box object that can be manipulated with edge contact.
     
@@ -220,33 +221,33 @@ class Box(SpatialObject):
         return SE3(contact_point) * SE3(SO3(self.orientation))
 
 
-class Cylinder(SpatialObject):
+class ManipulableCylinder(SpatialObject):
     """
     A cylinder object that can be manipulated with point or line contact.
     
     Attributes:
         radius (float): Radius of the cylinder.
-        height (float): Height of the cylinder.
+        length (float): Length of the cylinder.
     """
     
-    def __init__(self, radius=0.037, height=0.234, pose=SE3(), name="cylinder"):
+    def __init__(self, radius=0.037, length=0.234, pose=SE3(), name="cylinder"):
         """
         Initialize a Cylinder object.
         
         Args:
             radius (float): Radius of the cylinder.
-            height (float): Height of the cylinder.
+            length (float): Length of the cylinder.
             pose (SE3): Initial pose of the cylinder.
             name (str): Name identifier for the cylinder.
         """
         super().__init__(pose, name)
         
         self.radius = radius
-        self.height = height
-        self.geometry = Cylinder(radius=radius, height=height, pose=self.pose)
+        self.length = length
+        self.geometry = Cylinder(radius=radius, length=length, pose=self.pose)
         
         # Default grasp offset is at the top face center
-        self.set_grasp_offset(SE3(0, 0, self.height/2 - 0.02) * SE3.Rx(np.pi/2)) 
+        self.set_grasp_offset(SE3(0, 0, self.length/2 - 0.02) * SE3.Rx(np.pi/2)) 
     
     def get_rim_point(self, angle, on_top=False):
         """
@@ -260,7 +261,7 @@ class Cylinder(SpatialObject):
             numpy.ndarray: Point coordinates in world frame.
         """
         # Point on rim in object frame
-        z = self.height/2 if on_top else -self.height/2
+        z = self.length/2 if on_top else -self.length/2
         local_point = np.array([
             self.radius * np.cos(angle),
             self.radius * np.sin(angle),
@@ -284,7 +285,7 @@ class Cylinder(SpatialObject):
             numpy.ndarray: Point coordinates in world frame.
         """
         # Point on side in object frame
-        z = -self.height/2 + height_param * self.height
+        z = -self.length/2 + height_param * self.length
         local_point = np.array([
             self.radius * np.cos(angle),
             self.radius * np.sin(angle),
@@ -311,38 +312,70 @@ class Cylinder(SpatialObject):
         
         return world_axis
     
-    def get_rolling_contact_pose(self, angle, contact_height=0):
+    def place_cylinder(self, contact, direction=np.array([1, 0, 0])):
         """
-        Get the pose at a rolling contact point.
-        
+        Place the cylinder in the world frame.
+
         Args:
-            angle (float): Angle in radians around the cylinder axis.
-            contact_height (float): Height parameter for the contact point.
-            
-        Returns:
-            SE3: Pose at the rolling contact point.
+            contact (numpy.ndarray): Position of the contact point.
+            direction (numpy.ndarray): Direction of the cylinder x-axis.
         """
-        # Get contact point
-        height_param = 0.5 + contact_height/self.height
-        contact_point = self.get_side_point(angle, height_param)
+
+        # First move the cylinder to contact point
+        self.pose = SE3(contact) 
+
+        # Calculate the angle between the direction and the x-axis
+        rot_angle = vec_angle(np.array([1, 0, 0]), direction)
+        self.pose = self.pose * SE3.Rz(rot_angle) # the center of the cylinder is at the contact point
+
+        self.pose = self.pose * SE3([0, self.radius, self.length/2])
+
+        return self
+
+
         
-        # Calculate orientation: 
-        # - Z axis is along the cylinder axis
-        # - X axis points outward from the cylinder center at the given angle
-        # - Y axis completes the right-handed frame
         
-        z_axis = self.get_axis_vector()
-        local_x = np.array([np.cos(angle), np.sin(angle), 0])
-        world_x = SO3(self.orientation) * local_x
-        y_axis = np.cross(z_axis, world_x)
-        x_axis = np.cross(y_axis, z_axis)
         
-        # Normalize axes
-        x_axis = x_axis / np.linalg.norm(x_axis)
-        y_axis = y_axis / np.linalg.norm(y_axis)
-        z_axis = z_axis / np.linalg.norm(z_axis)
         
-        # Create rotation matrix
-        R = np.column_stack((x_axis, y_axis, z_axis))
         
-        return SE3(contact_point) * SE3(R=R) 
+
+
+
+
+
+
+    # def get_rolling_contact_pose(self, angle, contact_height=0):
+    #     """
+    #     Get the pose at a rolling contact point.
+        
+    #     Args:
+    #         angle (float): Angle in radians around the cylinder axis.
+    #         contact_height (float): Height parameter for the contact point.
+            
+    #     Returns:
+    #         SE3: Pose at the rolling contact point.
+    #     """
+    #     # Get contact point
+    #     height_param = 0.5 + contact_height/self.height
+    #     contact_point = self.get_side_point(angle, height_param)
+        
+    #     # Calculate orientation: 
+    #     # - Z axis is along the cylinder axis
+    #     # - X axis points outward from the cylinder center at the given angle
+    #     # - Y axis completes the right-handed frame
+        
+    #     z_axis = self.get_axis_vector()
+    #     local_x = np.array([np.cos(angle), np.sin(angle), 0])
+    #     world_x = SO3(self.orientation) * local_x
+    #     y_axis = np.cross(z_axis, world_x)
+    #     x_axis = np.cross(y_axis, z_axis)
+        
+    #     # Normalize axes
+    #     x_axis = x_axis / np.linalg.norm(x_axis)
+    #     y_axis = y_axis / np.linalg.norm(y_axis)
+    #     z_axis = z_axis / np.linalg.norm(z_axis)
+        
+    #     # Create rotation matrix
+    #     R = np.column_stack((x_axis, y_axis, z_axis))
+        
+    #     return SE3(contact_point) * SE3(R=R) 
