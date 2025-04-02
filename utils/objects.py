@@ -194,11 +194,11 @@ class Box(SpatialObject):
         
         # Transform normal to world frame (only rotation)
         normal_local = normals[face_idx]
-        normal_world = self.orientation @ normal_local
+        normal_world = SO3(self.orientation) * normal_local
         
         return normal_world
     
-    def get_edge_contact_pose(self, edge_idx, contact_param=0.5):
+    def get_edge_contact_pose(self, edge_idx, contact_param=0):
         """
         Get the pose at a contact point along an edge.
         
@@ -207,7 +207,7 @@ class Box(SpatialObject):
             contact_param (float): Parameter along the edge (0 = start, 1 = end, 0.5 = middle).
             
         Returns:
-            SE3: Pose at the contact point.
+            SE3: Pose at the contact point in world frame.
         """
         start_world, end_world = self.get_edge_in_world(edge_idx)
         
@@ -229,7 +229,7 @@ class Cylinder(SpatialObject):
         height (float): Height of the cylinder.
     """
     
-    def __init__(self, radius=0.02, height=0.1, pose=SE3(), name="cylinder"):
+    def __init__(self, radius=0.037, height=0.234, pose=SE3(), name="cylinder"):
         """
         Initialize a Cylinder object.
         
@@ -246,9 +246,9 @@ class Cylinder(SpatialObject):
         self.geometry = Cylinder(radius=radius, height=height, pose=self.pose)
         
         # Default grasp offset is at the top face center
-        self.set_grasp_offset(SE3(0, 0, self.height/2))
+        self.set_grasp_offset(SE3(0, 0, self.height/2 - 0.02) * SE3.Rx(np.pi/2)) 
     
-    def get_rim_point(self, angle, on_top=True):
+    def get_rim_point(self, angle, on_top=False):
         """
         Get a point on the rim of the cylinder.
         
@@ -272,7 +272,7 @@ class Cylinder(SpatialObject):
         
         return world_point
     
-    def get_side_point(self, angle, height_param=0.5):
+    def get_side_point(self, angle, height_param=0.0):
         """
         Get a point on the side of the cylinder.
         
@@ -298,7 +298,7 @@ class Cylinder(SpatialObject):
     
     def get_axis_vector(self):
         """
-        Get the axis vector of the cylinder in world coordinates.
+        Get the axis vector of the cylinder (z-axis) in world coordinates.
         
         Returns:
             numpy.ndarray: Unit vector along the cylinder axis in world frame.
@@ -307,7 +307,7 @@ class Cylinder(SpatialObject):
         local_axis = np.array([0, 0, 1])
         
         # Transform to world frame (only rotation)
-        world_axis = self.orientation @ local_axis
+        world_axis = SO3(self.orientation) * local_axis
         
         return world_axis
     
@@ -333,7 +333,7 @@ class Cylinder(SpatialObject):
         
         z_axis = self.get_axis_vector()
         local_x = np.array([np.cos(angle), np.sin(angle), 0])
-        world_x = self.orientation @ local_x
+        world_x = SO3(self.orientation) * local_x
         y_axis = np.cross(z_axis, world_x)
         x_axis = np.cross(y_axis, z_axis)
         
