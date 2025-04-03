@@ -168,7 +168,7 @@ class ManipulableBox(SpatialObject):
         start_world = self.pose * start_local
         end_world = self.pose * end_local
         
-        return start_world, end_world
+        return start_world.reshape(3,), end_world.reshape(3,)
     
     def get_face_normal(self, face_idx):
         """

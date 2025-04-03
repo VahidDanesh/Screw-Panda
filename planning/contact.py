@@ -1,8 +1,9 @@
 import numpy as np
 from spatialmath import SE3
 import pytransform3d.transformations as pt3d
+from utils.screw_utils import sclerp, generate_trajectory
 
-from utils.objects import SpatialObject, Box, Cylinder
+from utils.objects import SpatialObject, ManipulableBox, ManipulableCylinder
 from .primitives import (
     Grasping, Sliding, Pivoting, StraightRolling, CurvedRolling
 )

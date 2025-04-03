@@ -110,7 +110,7 @@ class StraightRolling(ManipulationPrimitive):
             self._object_poses.append(pose)
             
             # Convert to dual quaternion
-            dq = pt3d.dual_quaternion_from_transformation_matrix(pose.A)
+            dq = pt3d.dual_quaternion_from_transform(pose.A)
             self._object_dquats.append(dq)
         
         # Calculate the end-effector poses
@@ -123,7 +123,7 @@ class StraightRolling(ManipulationPrimitive):
             self._ee_poses.append(ee_pose)
             
             # Convert to dual quaternion for the end-effector
-            ee_dquat = pt3d.dual_quaternion_from_transformation_matrix(ee_pose.A)
+            ee_dquat = pt3d.dual_quaternion_from_transform(ee_pose.A)
             self._ee_dquats.append(ee_dquat)
         
         return self._object_poses, self._ee_poses
@@ -336,7 +336,7 @@ class CurvedRolling(ManipulationPrimitive):
             self._object_poses.append(pose)
             
             # Convert to dual quaternion
-            dq = pt3d.dual_quaternion_from_transformation_matrix(pose.A)
+            dq = pt3d.dual_quaternion_from_transform(pose.A)
             self._object_dquats.append(dq)
         
         # Calculate the end-effector poses
@@ -349,7 +349,7 @@ class CurvedRolling(ManipulationPrimitive):
             self._ee_poses.append(ee_pose)
             
             # Convert to dual quaternion for the end-effector
-            ee_dquat = pt3d.dual_quaternion_from_transformation_matrix(ee_pose.A)
+            ee_dquat = pt3d.dual_quaternion_from_transform(ee_pose.A)
             self._ee_dquats.append(ee_dquat)
         
         return self._object_poses, self._ee_poses 

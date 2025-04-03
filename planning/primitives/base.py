@@ -2,6 +2,7 @@ import numpy as np
 from spatialmath import SE3, UnitDualQuaternion
 import pytransform3d.transformations as pt3d
 from utils.objects import SpatialObject
+from utils.screw_utils import sclerp, dq_to_se3, se3_to_dq
 from abc import ABC, abstractmethod
 from roboticstoolbox import quintic
 
@@ -97,7 +98,7 @@ class ManipulationPrimitive(ABC):
     
     def _create_dquat_trajectory(self, start_pose, end_pose, tau):
         """
-        Create a dual quaternion trajectory between two poses.
+        Create a dual quaternion trajectory between two poses using pytransform3d.
         
         Args:
             start_pose (SE3): Starting pose.
@@ -107,19 +108,16 @@ class ManipulationPrimitive(ABC):
         Returns:
             list: List of dual quaternions along the trajectory.
         """
-        # Convert poses to dual quaternions
-        dq_start = UnitDualQuaternion(start_pose)
-        dq_end = UnitDualQuaternion(end_pose)
+        # Convert SE3 to transformation matrices for pytransform3d
+        T1 = start_pose.A
+        T2 = end_pose.A
         
-        # Interpolate along the trajectory
+        # Generate trajectory using screw interpolation
         dquats = []
         for t in tau:
-            # Implement screw linear interpolation
-            dq = pt3d.dual_quaternion_sclerp(
-                pt3d.dual_quaternion_from_transformation_matrix(start_pose.A),
-                pt3d.dual_quaternion_from_transformation_matrix(end_pose.A),
-                t
-            )
+            # Use pytransform3d's screw interpolation directly
+            T_interp = pt3d.transform_sclerp(T1, T2, t)
+            dq = pt3d.dual_quaternion_from_transform(T_interp)
             dquats.append(dq)
         
         return dquats
