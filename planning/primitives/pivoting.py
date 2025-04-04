@@ -1,6 +1,11 @@
+"""
+Pivoting primitive for rotating objects around a fixed point or edge.
+"""
+
 import numpy as np
 from spatialmath import SE3
-import pytransform3d.transformations as pt3d
+import pytransform3d.transformations as pt3d_trans
+import pytransform3d.batch_rotations as pt3d_batch
 from .base import ManipulationPrimitive
 
 class Pivoting(ManipulationPrimitive):
@@ -11,41 +16,97 @@ class Pivoting(ManipulationPrimitive):
     fixed point or line of contact with a supporting surface.
     """
     
-    def __init__(self, obj, goal_pose, pivot_edge_idx=0, pivot_param=0.5,
-                 duration=2.0, frequency=100):
+    def __init__(self, obj, goal_pose, **kwargs):
         """
         Initialize a pivoting primitive.
         
         Args:
-            obj (SpatialObject): The object to manipulate.
+            obj: The object to manipulate.
             goal_pose (SE3): Goal pose for the object.
-            pivot_edge_idx (int): Index of the edge to pivot around.
-            pivot_param (float): Parameter along the edge for the pivot point.
+            **kwargs: Additional configuration options:
+                For box:
+                - pivot_edge_idx (int): Index of the edge to pivot around.
+                - pivot_param (float): Parameter along the edge for the pivot point.
+                
+                For cylinder:
+                - pivot_angle (float): Angle around the rim for the pivot point.
+                - on_top (bool): Whether to pivot on the top rim (True) or bottom rim (False).
+                
+                For general screw motion:
+                - screw_axis (ndarray): Axis of rotation.
+                - screw_point (ndarray): Point on the rotation axis.
+                - screw_angle (float): Rotation angle (optional, computed from goal if not provided).
+                
             duration (float): Duration of the motion in seconds.
             frequency (int): Sampling frequency for the trajectory in Hz.
         """
-        super().__init__(obj, goal_pose, duration, frequency)
-        self.pivot_edge_idx = pivot_edge_idx
-        self.pivot_param = pivot_param
+        super().__init__(obj, goal_pose, 
+                         duration=kwargs.get('duration', 2.0), 
+                         frequency=kwargs.get('frequency', 100))
         
-        # Calculate the pivot point
-        self._calculate_pivot_point()
+        # Configure pivoting based on provided parameters
+        if 'screw_axis' in kwargs and 'screw_point' in kwargs:
+            self._configure_from_screw(
+                kwargs.get('screw_axis'),
+                kwargs.get('screw_angle', None),
+                kwargs.get('screw_point')
+            )
+        elif self.object_type == "cylinder":
+            self._configure_cylinder_pivot(
+                kwargs.get('pivot_angle', 0),
+                kwargs.get('on_top', True)
+            )
+        elif self.object_type == "box":
+            self._configure_box_pivot(
+                kwargs.get('pivot_edge_idx', 0),
+                kwargs.get('pivot_param', 0.5)
+            )
+        else:
+            raise ValueError(f"Unknown object type: {self.object_type}")
+    
+    def _configure_from_screw(self, axis, angle, point):
+        """
+        Configure pivoting from screw parameters.
+        
+        Args:
+            axis (ndarray): Axis of rotation.
+            angle (float): Rotation angle. If None, computed from start and goal poses.
+            point (ndarray): Point on the rotation axis.
+        """
+        # Placeholder - will be implemented later
+        pass
+    
+    def _configure_box_pivot(self, edge_idx, param):
+        """
+        Configure pivoting for a box.
+        
+        Args:
+            edge_idx (int): Index of the edge to pivot around.
+            param (float): Parameter along the edge for the pivot point.
+        """
+        # Placeholder - will be implemented later
+        pass
+    
+    def _configure_cylinder_pivot(self, angle, on_top):
+        """
+        Configure pivoting for a cylinder.
+        
+        Args:
+            angle (float): Angle around the rim for the pivot point.
+            on_top (bool): Whether to pivot on the top rim (True) or bottom rim (False).
+        """
+        # Placeholder - will be implemented later
+        pass
     
     def _calculate_pivot_point(self):
         """
         Calculate the pivot point in world coordinates.
         
-        For a box, the pivot point is a point on one of its edges, determined by
-        the edge index and a parameter along that edge.
+        Returns:
+            ndarray: The pivot point coordinates.
         """
-        # Get the edge in world coordinates
-        start_point, end_point = self.object.get_edge_in_world(self.pivot_edge_idx)
-        
-        # Calculate the pivot point by interpolating along the edge
-        self.pivot_point = start_point + self.pivot_param * (end_point - start_point)
-        
-        # Calculate the pivot direction (assumed to be vertical)
-        self.pivot_direction = np.array([0, 0, 1])
+        # Placeholder - will be implemented later
+        pass
     
     def plan(self):
         """
@@ -58,58 +119,5 @@ class Pivoting(ManipulationPrimitive):
         Returns:
             tuple: (object_poses, ee_poses) Lists of object and end-effector poses.
         """
-        # Get time scaling
-        tau, _ = self._set_time_scaling(method="quintic")
-        
-        # Extract the transformation from the pivot point to the object center
-        # This will be preserved throughout the pivot
-        pivot_to_center = self.start_pose.inv() * SE3(self.pivot_point)
-        
-        # Calculate the total rotation angle needed
-        # Here we're assuming rotation around the vertical (Z) axis
-        start_rot = self.start_pose.R
-        goal_rot = self.goal_pose.R
-        
-        # Generate object poses
-        self._object_poses = []
-        self._object_dquats = []
-        
-        for t in tau:
-            # Interpolate rotation using quaternion slerp
-            if np.allclose(start_rot, goal_rot):
-                rot = start_rot
-            else:
-                dq_rot = pt3d.quaternion_slerp(
-                    pt3d.quaternion_from_matrix(start_rot),
-                    pt3d.quaternion_from_matrix(goal_rot),
-                    t
-                )
-                rot = pt3d.matrix_from_quaternion(dq_rot)
-            
-            # Calculate the new object pose
-            # First create a pose at the pivot point with the interpolated rotation
-            pivot_pose = SE3(self.pivot_point) * SE3(R=rot)
-            
-            # Then apply the preserved pivot-to-center transformation
-            obj_pose = pivot_pose * pivot_to_center
-            
-            self._object_poses.append(obj_pose)
-            
-            # Convert to dual quaternion
-            dq = pt3d.dual_quaternion_from_transformation_matrix(obj_pose.A)
-            self._object_dquats.append(dq)
-        
-        # Calculate the end-effector poses
-        self._ee_poses = []
-        self._ee_dquats = []
-        
-        for obj_pose in self._object_poses:
-            # Calculate the grasp pose at each step
-            ee_pose = obj_pose * self.object.grasp_offset
-            self._ee_poses.append(ee_pose)
-            
-            # Convert to dual quaternion for the end-effector
-            ee_dquat = pt3d.dual_quaternion_from_transformation_matrix(ee_pose.A)
-            self._ee_dquats.append(ee_dquat)
-        
-        return self._object_poses, self._ee_poses 
+        # Placeholder - will be implemented later
+        pass 

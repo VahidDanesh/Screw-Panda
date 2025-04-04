@@ -1,13 +1,10 @@
-# planning/__init__.py
 """
 Planning module for the Screw-Panda package.
-This module contains planning-related functionality.
+This module contains planning-related functionality for contact-based manipulation.
 """
 
-# Use screw utilities from utils
-from utils.screw_utils import sclerp, generate_trajectory, pose_to_screw_parameters
 
-# Contact-based manipulation imports
+# Contact-based manipulation
 from .contact import ContactPlanner
 from .primitives import (
     ManipulationPrimitive,
@@ -18,12 +15,10 @@ from .primitives import (
     CurvedRolling
 )
 
+# Path planning (to be implemented)
+# from .path import PathPlanner, ContactConstraint, TrajectoryOptimizer
+
 __all__ = [
-    # Screw Theory
-    'sclerp',
-    'generate_trajectory',
-    'pose_to_screw_parameters',
-    
     # Contact-based manipulation
     'ContactPlanner',
     'ManipulationPrimitive',
@@ -31,5 +26,10 @@ __all__ = [
     'Sliding',
     'Pivoting',
     'StraightRolling',
-    'CurvedRolling'
-]
+    'CurvedRolling',
+    
+    # Path planning (to be implemented)
+    # 'PathPlanner',
+    # 'ContactConstraint',
+    # 'TrajectoryOptimizer'
+] 

@@ -62,24 +62,6 @@ class SpatialObject:
             self.geometry.T = self.pose
         return self
     
-    def to_pt3d_transform(self):
-        """Convert the object's pose to pytransform3d transform."""
-        T = np.eye(4)
-        T[:3, :3] = self.orientation
-        T[:3, 3] = self.position
-        return T
-    
-    def from_pt3d_transform(self, T):
-        """
-        Update the object's pose from a pytransform3d transform.
-        
-        Args:
-            T (numpy.ndarray): 4x4 homogeneous transformation matrix.
-        """
-        self.pose = SE3(T)
-        if self.geometry:
-            self.geometry.T = self.pose
-        return self
 
 
 class ManipulableBox(SpatialObject):
