@@ -1,109 +1,73 @@
+"""
+Spatial object classes for manipulation.
+"""
+
 import numpy as np
 from spatialmath import SE3, SO3, UnitQuaternion, DualQuaternion
-from spatialgeometry import Cuboid, Cylinder, Shape
+from spatialgeometry import Cuboid, Cylinder
 import pytransform3d.rotations as pr3d
 import pytransform3d.transformations as pt3d
 import pytransform3d.coordinates as pc3d
 from .utils import vec_angle
 
-class SpatialObject:
+class MBox(Cuboid):
     """
-    Base class for spatial objects with geometries that can be manipulated with environment contact.
+    A box object that can be manipulated with edge contact.
+    Inherits from Cuboid.
     
     Attributes:
-        geometry (Shape): The spatial geometry (e.g., Cuboid, Cylinder) from spatialgeometry.
-        pose (SE3): The object's current pose as an SE3 transformation.
-        name (str): A name identifier for the object.
+        edges (list): List of edge vectors in object frame.
         grasp_offset (SE3): Rigid transformation from object center to grasp point.
     """
     
-    def __init__(self, pose=SE3(), name="object"):
-        """Base initialization for spatial objects"""
+    def __init__(self, cuboid, name="box", **kwargs):
+        """
+        Initialize a Box object from an existing Cuboid.
+        
+        Args:
+            cuboid (Cuboid): Existing Cuboid to use as the base.
+        """
+        # Initialize using the Cuboid's properties
+        super().__init__(cuboid.scale, **kwargs)
         self.name = name
-        self.pose = pose if isinstance(pose, SE3) else SE3(pose)
-        # Default grasp offset is identity (grasp at center)
+        
+
+        
+        # Add manipulation properties
         self.grasp_offset = SE3()
-        self.geometry = None
+        
+        # Create a list of the 12 edges of the box in object frame
+        self._create_edges()
+        
+        # Default grasp offset is at the middle of the back edge (negative x direction)
+        bTe = SE3(-self.scale[0]/2 + 0.01, 0, 0) * SE3.Rx(np.pi/2)
+        self.set_grasp_offset(bTe)
     
-    @property
-    def position(self):
-        """Get the object's position (translation vector) as a numpy array."""
-        return self.pose.t
-    
-    @property
-    def orientation(self):
-        """Get the object's orientation as a rotation matrix (3x3 numpy array)."""
-        return self.pose.R
     
     @property
     def grasp_pose(self):
         """Get the pose at the grasp point."""
-        return self.pose * self.grasp_offset
+        print(self.T)
+        print(self.grasp_offset)
+        return SE3(self.T) * self.grasp_offset
     
     def set_grasp_offset(self, offset):
         """
         Set the grasp offset from the center of the object.
         
         Args:
-            offset (SE3): Rigid transformation from object center to grasp point.
+            offset (np.ndarray): Rigid transformation from object center to grasp point.
+            
+        Returns:
+            MBox: Self for method chaining.
         """
         self.grasp_offset = offset if isinstance(offset, SE3) else SE3(offset)
         return self
     
-    def update_pose(self, pose):
-        """
-        Update the object's pose.
-        
-        Args:
-            pose (SE3): New pose for the object.
-        """
-        self.pose = pose if isinstance(pose, SE3) else SE3(pose)
-        if self.geometry:
-            self.geometry.T = self.pose
-        return self
-    
-
-
-class ManipulableBox(SpatialObject):
-    """
-    A box object that can be manipulated with edge contact.
-    
-    Attributes:
-        length (float): Length of the box (x dimension).
-        width (float): Width of the box (y dimension).
-        height (float): Height of the box (z dimension).
-        edges (list): List of edge vectors in object frame.
-    """
-    
-    def __init__(self, dimensions=(0.1, 0.07, 0.03), pose=SE3(), name="box"):
-        """
-        Initialize a Box object.
-        
-        Args:
-            dimensions (tuple): (length, width, height) dimensions of the box.
-            pose (SE3): Initial pose of the box.
-            name (str): Name identifier for the box.
-        """
-        super().__init__(pose, name)
-        
-        if len(dimensions) != 3:
-            raise ValueError("Box requires 3 dimensions: (length, width, height)")
-        
-        self.length, self.width, self.height = dimensions
-        self.geometry = Cuboid(scale=dimensions, pose=self.pose)
-        
-        # Create a list of the 12 edges of the box in object frame
-        # Each edge is a tuple of (start_point, end_point)
-        self._create_edges()
-        
-        # Default grasp offset is at the middle of the back edge (negative x direction)
-        bTe = SE3(-self.length/2 + 0.01, 0, 0) * SE3.Rx(np.pi/2)
-        self.set_grasp_offset(bTe)
-    
     def _create_edges(self):
         """Create the edges of the box in object frame."""
         # Half-dimensions for easier calculations
-        hl, hw, hh = self.length/2, self.width/2, self.height/2
+        hl, hw, hh = self.scale[0]/2, self.scale[1]/2, self.scale[2]/2
         
         # 8 corners of the box, x direction if pointing forward, y direction if pointing left, z direction if pointing up
         corners = [
@@ -141,14 +105,14 @@ class ManipulableBox(SpatialObject):
         Returns:
             tuple: (start_point, end_point) in world coordinates.
         """
-        if edge_idx < 0 or edge_idx >= len(self.edges):
+        if edge_idx < 1 or edge_idx > len(self.edges):
             raise ValueError(f"Edge index must be between 1 and {len(self.edges)}")
             
         start_local, end_local = self.edges[edge_idx - 1]
         
         # Transform to world frame
-        start_world = self.pose * start_local
-        end_world = self.pose * end_local
+        start_world = self.T * start_local
+        end_world = self.T * end_local
         
         return start_world.reshape(3,), end_world.reshape(3,)
     
@@ -177,7 +141,7 @@ class ManipulableBox(SpatialObject):
         
         # Transform normal to world frame (only rotation)
         normal_local = normals[face_idx]
-        normal_world = SO3(self.orientation) * normal_local
+        normal_world = SO3(self.T[:3, :3]) * normal_local
         
         return normal_world
     
@@ -200,36 +164,62 @@ class ManipulableBox(SpatialObject):
         # TODO: Calculate orientation based on edge direction
         
         # For now, just use object orientation
-        return SE3(contact_point) * SE3(SO3(self.orientation))
+        return SE3(contact_point) * SE3(SO3(self.pose.R))
 
 
-class ManipulableCylinder(SpatialObject):
+class MCylinder(Cylinder):
     """
     A cylinder object that can be manipulated with point or line contact.
+    Inherits from Cylinder.
     
     Attributes:
-        radius (float): Radius of the cylinder.
-        length (float): Length of the cylinder.
+        grasp_offset (SE3): Rigid transformation from object center to grasp point.
     """
     
-    def __init__(self, radius=0.037, length=0.234, pose=SE3(), name="cylinder"):
+    def __init__(self, cylinder):
         """
-        Initialize a Cylinder object.
+        Initialize a Cylinder object from an existing Cylinder.
         
         Args:
-            radius (float): Radius of the cylinder.
-            length (float): Length of the cylinder.
-            pose (SE3): Initial pose of the cylinder.
-            name (str): Name identifier for the cylinder.
+            cylinder (Cylinder): Existing Cylinder to use as the base.
         """
-        super().__init__(pose, name)
+        # Initialize using the Cylinder's properties
+        super().__init__(
+            radius=cylinder.radius,
+            length=cylinder.length,
+            pose=cylinder.T,
+            color=cylinder.color,
+            alpha=cylinder.alpha
+        )
         
-        self.radius = radius
-        self.length = length
-        self.geometry = Cylinder(radius=radius, length=length, pose=self.pose)
+        # Add grasp offset property
+        self.grasp_offset = SE3()
         
         # Default grasp offset is at the top face center
-        self.set_grasp_offset(SE3(0, 0, self.length/2 - 0.02) * SE3.Rx(np.pi/2)) 
+        self.set_grasp_offset(SE3(0, 0, self.length/2 - 0.02) * SE3.Rx(np.pi/2))
+    
+    @property
+    def pose(self):
+        """Get the object's pose as an SE3 transformation."""
+        return SE3(self.T)
+    
+    @property
+    def grasp_pose(self):
+        """Get the pose at the grasp point."""
+        return self.pose * self.grasp_offset
+    
+    def set_grasp_offset(self, offset):
+        """
+        Set the grasp offset from the center of the object.
+        
+        Args:
+            offset (SE3): Rigid transformation from object center to grasp point.
+            
+        Returns:
+            MCylinder: Self for method chaining.
+        """
+        self.grasp_offset = offset if isinstance(offset, SE3) else SE3(offset)
+        return self
     
     def get_rim_point(self, angle, on_top=False):
         """
@@ -290,7 +280,7 @@ class ManipulableCylinder(SpatialObject):
         local_axis = np.array([0, 0, 1])
         
         # Transform to world frame (only rotation)
-        world_axis = SO3(self.orientation) * local_axis
+        world_axis = SO3(self.pose.R) * local_axis
         
         return world_axis
     
@@ -301,16 +291,18 @@ class ManipulableCylinder(SpatialObject):
         Args:
             contact (numpy.ndarray): Position of the contact point.
             direction (numpy.ndarray): Direction of the cylinder x-axis.
+            
+        Returns:
+            MCylinder: Self for method chaining.
         """
-
         # First move the cylinder to contact point
-        self.pose = SE3(contact) 
+        self.T = SE3(contact).A
 
         # Calculate the angle between the direction and the x-axis
         rot_angle = vec_angle(np.array([1, 0, 0]), direction)
-        self.pose = self.pose * SE3.Rz(rot_angle) # the center of the cylinder is at the contact point
+        self.T = (SE3(self.T) * SE3.Rz(rot_angle)).A  # the center of the cylinder is at the contact point
 
-        self.pose = self.pose * SE3([0, self.radius, self.length/2])
+        self.T = (SE3(self.T) * SE3([0, self.radius, self.length/2])).A
 
         return self
 

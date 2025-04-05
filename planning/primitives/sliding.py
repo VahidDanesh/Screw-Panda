@@ -4,7 +4,7 @@ Sliding primitive for maintaining face contact during manipulation.
 
 import numpy as np
 from spatialmath import SE3
-import pytransform3d.transformations as pt3d_trans
+import pytransform3d.transformations as pt3d
 from .base import ManipulationPrimitive
 
 class Sliding(ManipulationPrimitive):

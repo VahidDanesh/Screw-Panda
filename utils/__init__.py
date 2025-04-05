@@ -2,7 +2,7 @@
 Utility functions and classes for manipulation planning.
 """
 
-from .objects import SpatialObject, ManipulableBox, ManipulableCylinder
+from .objects import MBox, MCylinder
 from .utils import vec_angle
 
 __all__ = [

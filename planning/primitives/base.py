@@ -4,9 +4,12 @@ Base class for manipulation primitives.
 
 import numpy as np
 from spatialmath import SE3
-import pytransform3d.trajectories as pt3d_traj
-import pytransform3d.batch_rotations as pt3d_batch
-import pytransform3d.transformations as pt3d_trans
+
+from pytransform3d import (
+    batch_rotations as pbr3d,
+    transformations as pt3d,
+    trajectories as ptr3d,
+)
 
 class ManipulationPrimitive:
     """
@@ -17,7 +20,7 @@ class ManipulationPrimitive:
     generate trajectories for both the object and the robot end-effector.
     """
     
-    def __init__(self, obj, goal_pose, duration=2.0, frequency=100):
+    def __init__(self, obj, goal_pose, duration=2.0, frequency=1000):
         """
         Initialize a manipulation primitive.
         

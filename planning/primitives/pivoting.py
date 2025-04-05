@@ -4,8 +4,8 @@ Pivoting primitive for rotating objects around a fixed point or edge.
 
 import numpy as np
 from spatialmath import SE3
-import pytransform3d.transformations as pt3d_trans
-import pytransform3d.batch_rotations as pt3d_batch
+import pytransform3d.transformations as pt3d
+import pytransform3d.batch_rotations as pbr3d
 from .base import ManipulationPrimitive
 
 class Pivoting(ManipulationPrimitive):
