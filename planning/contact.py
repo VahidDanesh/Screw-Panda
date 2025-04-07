@@ -6,7 +6,7 @@ import numpy as np
 from spatialmath import SE3
 import pytransform3d.transformations as pt3d_trans
 
-from utils.objects import SpatialObject
+from utils.objects import MBox, MCylinder
 from .primitives import (
     Grasping, Sliding, Pivoting, StraightRolling, CurvedRolling
 )

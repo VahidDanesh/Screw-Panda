@@ -8,7 +8,6 @@ from spatialgeometry import Cuboid, Cylinder
 from pytransform3d import (
     rotations as pr3d,
     transformations as pt3d,
-    trajectories as ptr3d,
 )
 from .utils import vec_angle
 
@@ -22,21 +21,19 @@ class MBox(Cuboid):
         grasp_offset (SE3): Rigid transformation from object center to grasp point.
     """
     
-    def __init__(self: 'MBox', cuboid: Cuboid, name: str = "box", **kwargs):
+    def __init__(self, cuboid: Cuboid, name: str = "box", **kwargs):
         """
         Initialize a Box object from an existing Cuboid.
         
         Args:
             cuboid (Cuboid): Existing Cuboid to use as the base.
+            name (str): Name identifier for the box.
+            **kwargs: Additional arguments for the parent Cuboid class.
         """
         # Initialize using the Cuboid's properties
         super().__init__(scale=cuboid.scale, **kwargs)
         self.name = name
         self.T = cuboid.T
-        self.poses = [cuboid.T]
-        self.dqs = ptr3d.dual_quaternions_from_transforms(np.asarray(self.poses))
-        
-
         
         # Add manipulation properties
         self.grasp_offset = SE3()
@@ -48,11 +45,9 @@ class MBox(Cuboid):
         bTe = SE3(-self.scale[0]/2 + 0.01, 0, 0) * SE3.Rx(np.pi/2)
         self.set_grasp_offset(bTe)
     
-    
     @property
     def grasp_pose(self):
         """Get the pose at the grasp point."""
-
         return SE3(self.T) * self.grasp_offset
     
     def set_grasp_offset(self, offset):
@@ -60,7 +55,7 @@ class MBox(Cuboid):
         Set the grasp offset from the center of the object.
         
         Args:
-            offset (np.ndarray): Rigid transformation from object center to grasp point.
+            offset (SE3): Rigid transformation from object center to grasp point.
             
         Returns:
             MBox: Self for method chaining.
@@ -115,8 +110,8 @@ class MBox(Cuboid):
         start_local, end_local = self.edges[edge_idx - 1]
         
         # Transform to world frame
-        start_world = self.T * start_local
-        end_world = self.T * end_local
+        start_world = SE3(self.T) * start_local
+        end_world = SE3(self.T) * end_local
         
         return start_world.reshape(3,), end_world.reshape(3,)
     
@@ -168,7 +163,7 @@ class MBox(Cuboid):
         # TODO: Calculate orientation based on edge direction
         
         # For now, just use object orientation
-        return SE3(contact_point) * SE3(SO3(self.pose.R))
+        return SE3(contact_point) * SE3(SO3(self.T[:3, :3]))
 
 
 class MCylinder(Cylinder):
@@ -186,6 +181,8 @@ class MCylinder(Cylinder):
         
         Args:
             cylinder (Cylinder): Existing Cylinder to use as the base.
+            name (str): Name identifier for the cylinder.
+            **kwargs: Additional arguments for the parent Cylinder class.
         """
         # Initialize using the Cylinder's properties
         super().__init__(
@@ -195,15 +192,12 @@ class MCylinder(Cylinder):
         )
         self.name = name
         self.T = cylinder.T
-        self.poses = [cylinder.T]
-        self.dqs = ptr3d.dual_quaternions_from_transforms(np.asarray(self.poses))
         
         # Add grasp offset property
         self.grasp_offset = SE3()
         
         # Default grasp offset is at the top face center
         self.set_grasp_offset(SE3(0, 0, self.length/2 - 0.02) * SE3.Rx(np.pi/2))
-    
     
     @property
     def grasp_pose(self):
