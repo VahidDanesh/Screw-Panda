@@ -5,9 +5,11 @@ Spatial object classes for manipulation.
 import numpy as np
 from spatialmath import SE3, SO3, UnitQuaternion, DualQuaternion
 from spatialgeometry import Cuboid, Cylinder
-import pytransform3d.rotations as pr3d
-import pytransform3d.transformations as pt3d
-import pytransform3d.coordinates as pc3d
+from pytransform3d import (
+    rotations as pr3d,
+    transformations as pt3d,
+    trajectories as ptr3d,
+)
 from .utils import vec_angle
 
 class MBox(Cuboid):
@@ -20,7 +22,7 @@ class MBox(Cuboid):
         grasp_offset (SE3): Rigid transformation from object center to grasp point.
     """
     
-    def __init__(self, cuboid, name="box", **kwargs):
+    def __init__(self: 'MBox', cuboid: Cuboid, name: str = "box", **kwargs):
         """
         Initialize a Box object from an existing Cuboid.
         
@@ -28,8 +30,11 @@ class MBox(Cuboid):
             cuboid (Cuboid): Existing Cuboid to use as the base.
         """
         # Initialize using the Cuboid's properties
-        super().__init__(cuboid.scale, **kwargs)
+        super().__init__(scale=cuboid.scale, **kwargs)
         self.name = name
+        self.T = cuboid.T
+        self.poses = [cuboid.T]
+        self.dqs = ptr3d.dual_quaternions_from_transforms(np.asarray(self.poses))
         
 
         
@@ -47,8 +52,7 @@ class MBox(Cuboid):
     @property
     def grasp_pose(self):
         """Get the pose at the grasp point."""
-        print(self.T)
-        print(self.grasp_offset)
+
         return SE3(self.T) * self.grasp_offset
     
     def set_grasp_offset(self, offset):
@@ -176,7 +180,7 @@ class MCylinder(Cylinder):
         grasp_offset (SE3): Rigid transformation from object center to grasp point.
     """
     
-    def __init__(self, cylinder):
+    def __init__(self, cylinder: Cylinder, name: str = "cylinder", **kwargs):
         """
         Initialize a Cylinder object from an existing Cylinder.
         
@@ -187,10 +191,12 @@ class MCylinder(Cylinder):
         super().__init__(
             radius=cylinder.radius,
             length=cylinder.length,
-            pose=cylinder.T,
-            color=cylinder.color,
-            alpha=cylinder.alpha
+            **kwargs
         )
+        self.name = name
+        self.T = cylinder.T
+        self.poses = [cylinder.T]
+        self.dqs = ptr3d.dual_quaternions_from_transforms(np.asarray(self.poses))
         
         # Add grasp offset property
         self.grasp_offset = SE3()
@@ -198,15 +204,11 @@ class MCylinder(Cylinder):
         # Default grasp offset is at the top face center
         self.set_grasp_offset(SE3(0, 0, self.length/2 - 0.02) * SE3.Rx(np.pi/2))
     
-    @property
-    def pose(self):
-        """Get the object's pose as an SE3 transformation."""
-        return SE3(self.T)
     
     @property
     def grasp_pose(self):
         """Get the pose at the grasp point."""
-        return self.pose * self.grasp_offset
+        return SE3(self.T) * self.grasp_offset
     
     def set_grasp_offset(self, offset):
         """
@@ -241,7 +243,7 @@ class MCylinder(Cylinder):
         ])
         
         # Transform to world frame
-        world_point = self.pose * local_point
+        world_point = SE3(self.T) * local_point
         
         return world_point
     
@@ -265,7 +267,7 @@ class MCylinder(Cylinder):
         ])
         
         # Transform to world frame
-        world_point = self.pose * local_point
+        world_point = SE3(self.T) * local_point
         
         return world_point
     
@@ -280,7 +282,7 @@ class MCylinder(Cylinder):
         local_axis = np.array([0, 0, 1])
         
         # Transform to world frame (only rotation)
-        world_axis = SO3(self.pose.R) * local_axis
+        world_axis = SO3(self.T[:3, :3]) * local_axis
         
         return world_axis
     
