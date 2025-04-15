@@ -4,6 +4,7 @@ Base class for manipulation primitives.
 
 import numpy as np
 import roboticstoolbox as rtb
+from spatialgeometry import Cuboid, Cylinder
 from spatialmath import SE3
 from utils.objects import MBox, MCylinder
 from pytransform3d import (
@@ -24,7 +25,7 @@ class ManipulationPrimitive:
     Attributes:
         object: The object being manipulated (MBox or MCylinder)
         object_type (str): Type of object ('box', 'cylinder', or 'unknown')
-        start_pose (SE3): Initial pose of the object
+        start_pose (SE3): Initial pose of the object 
         goal_pose (SE3): Target pose for the object
         duration (float): Duration of the motion in seconds
         frequency (int): Sampling frequency for the trajectory in Hz
@@ -37,34 +38,129 @@ class ManipulationPrimitive:
         ee_dqs (list): List of end-effector dual quaternions along the trajectory
     """
     
-    def __init__(self, obj: MBox | MCylinder, goal_pose: SE3 | np.ndarray, duration: float = 2.0, frequency: int = 1000):
+    def __init__(self, 
+                 obj: MBox | MCylinder | None = None, 
+                 goal_pose: SE3 | np.ndarray | None = None,
+                 start_pose: SE3 | np.ndarray | None = None, 
+                 duration: float = 2.0, 
+                 frequency: int = 1000,
+                 **kwargs):
         """
         Initialize a manipulation primitive.
         
         Args:
             obj: The object to manipulate.
-            goal_pose (SE3): Goal pose for the object.
+            goal_pose (SE3 | np.ndarray | None): Goal pose for the object.
+            start_pose (SE3 | np.ndarray | None): Initial pose of the object.
             duration (float): Duration of the motion in seconds.
             frequency (int): Sampling frequency for the trajectory in Hz.
         """
-        self.object = obj
-        self.object_type = self._determine_object_type(obj)
-        self.start_pose = obj.T  # Current pose of the object
-        self.goal_pose = goal_pose if isinstance(goal_pose, SE3) else SE3(goal_pose)
-        self.duration = duration
-        self.frequency = frequency
+        self._object = obj
+        self._start_pose = start_pose
+        self._goal_pose = goal_pose 
+        self._duration = duration
+        self._frequency = frequency
+        self._time_scaling = kwargs.get("time_scaling", "quintic")
         
         # Parameters used for path planning
-        self.steps = int(self.duration * self.frequency)
-        self.tvec = np.linspace(0, self.duration, self.steps)
-        self._set_time_scaling()
+        self._update_trajectory_parameters()
+        self._set_time_scaling(self._time_scaling)
         
         # Initialize result containers
         self.object_poses = []
         self.ee_poses = []
         self.object_dqs = []
         self.ee_dqs = []
+        
+        
+    @property
+    def object(self):
+        """The object being manipulated."""
+        return self._object
+    @object.setter
+    def object(self, obj):
+        """Set a new object and update dependent parameters."""
+        if not isinstance(obj, (MBox, MCylinder)):
+            if isinstance(obj, Cuboid):
+                self._object = MBox(obj)
+            elif isinstance(obj, Cylinder):
+                self._object = MCylinder(obj)
+            else:
+                raise ValueError("Object must be of type MBox or MCylinder")
+        else:
+            self._object = obj
+            self._object_type = self._determine_object_type(self._object)
+            self._start_pose = obj.T if self._start_pose is None else self._start_pose
+            self._update_trajectory_parameters()
     
+    @property
+    def start_pose(self):
+        """Current start pose for the manipulation."""
+        return self._start_pose
+
+    @start_pose.setter
+    def start_pose(self, pose):
+        """Set a new start pose and update dependent parameters."""
+        self._start_pose = pose if isinstance(pose, SE3) else SE3(pose)
+
+    @property
+    def goal_pose(self):
+        """Goal pose for the manipulation."""
+        return self._goal_pose
+
+    @goal_pose.setter
+    def goal_pose(self, pose):
+        """Set a new goal pose and update dependent parameters."""
+        self._goal_pose = pose if isinstance(pose, SE3) else SE3(pose)
+
+    @property
+    def duration(self):
+        """Duration of the motion in seconds."""
+        return self._duration
+
+    @duration.setter
+    def duration(self, value):
+        """Set a new duration and update dependent parameters."""
+        if value <= 0:
+            raise ValueError("Duration must be positive")
+        self._duration = value
+        self._update_trajectory_parameters()
+
+    @property
+    def frequency(self):
+        """Sampling frequency for the trajectory in Hz."""
+        return self._frequency
+
+    @frequency.setter
+    def frequency(self, value):
+        """Set a new frequency and update dependent parameters."""
+        if value <= 0:
+            raise ValueError("Frequency must be positive")
+        self._frequency = value
+        self._update_trajectory_parameters()
+
+    
+    @property
+    def time_scaling(self):
+        """Time scaling method for the trajectory."""
+        return self._time_scaling
+    
+    @time_scaling.setter
+    def time_scaling(self, method):
+        """Set a new time scaling method and update dependent parameters."""
+        if method not in ["linear", "cubic", "quintic"]:
+            raise ValueError("Invalid time scaling method")
+        self._time_scaling = method
+        self._set_time_scaling(method)
+        
+        
+    def _update_trajectory_parameters(self):
+        """Update trajectory parameters when duration or frequency changes."""
+        self.steps = int(self._duration * self._frequency)
+        self.tvec = np.linspace(0, self._duration, self.steps)
+        self._set_time_scaling()
+        
+        
     def _determine_object_type(self, obj: MBox | MCylinder):
         """
         Determine object type from name attribute.
@@ -97,8 +193,7 @@ class ManipulationPrimitive:
         if method == "linear":
             self.tau = tau
         elif method == "cubic":
-            # TODO: Implement cubic time scaling
-            raise NotImplementedError("Cubic time scaling not implemented")
+            self.tau = 3 * tau**2 - 2 * tau**3
         elif method == "quintic":
             self.tau = rtb.quintic(q0=0, qf=1, t=tau).q
     
