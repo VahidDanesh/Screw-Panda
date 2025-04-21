@@ -8,9 +8,9 @@ from spatialgeometry import Cuboid, Cylinder
 from spatialmath import SE3
 from utils.objects import MBox, MCylinder
 from pytransform3d import (
-    batch_rotations as pbr3d,
-    transformations as pt3d,
-    trajectories as ptr3d,
+    batch_rotations as pb,
+    transformations as pt,
+    trajectories as ptr,
 )
 import modern_robotics as mr
 
@@ -44,7 +44,7 @@ class ManipulationPrimitive:
                  start_pose: SE3 | np.ndarray | None = None, 
                  duration: float = 2.0, 
                  frequency: int = 1000,
-                 **kwargs):
+                 time_scaling: str = "quintic"):
         """
         Initialize a manipulation primitive.
         
@@ -54,17 +54,19 @@ class ManipulationPrimitive:
             start_pose (SE3 | np.ndarray | None): Initial pose of the object.
             duration (float): Duration of the motion in seconds.
             frequency (int): Sampling frequency for the trajectory in Hz.
+            time_scaling (str): Time scaling method for the trajectory.
         """
         self._object = obj
         self._start_pose = start_pose
         self._goal_pose = goal_pose 
+        
         self._duration = duration
         self._frequency = frequency
-        self._time_scaling = kwargs.get("time_scaling", "quintic")
+        self.duration = duration
+        self.frequency = frequency # validate
+        self.time_scaling = time_scaling
         
-        # Parameters used for path planning
-        self._update_trajectory_parameters()
-        self._set_time_scaling(self._time_scaling)
+        self._set_time_scaling(self.time_scaling)
         
         # Initialize result containers
         self.object_poses = []
@@ -96,17 +98,18 @@ class ManipulationPrimitive:
     @property
     def start_pose(self):
         """Current start pose for the manipulation."""
-        return self._start_pose
+        return SE3(self._start_pose) if self._start_pose is not None else None
 
     @start_pose.setter
     def start_pose(self, pose):
+        # TODO: accept dq or SE3
         """Set a new start pose and update dependent parameters."""
         self._start_pose = pose if isinstance(pose, SE3) else SE3(pose)
 
     @property
     def goal_pose(self):
         """Goal pose for the manipulation."""
-        return self._goal_pose
+        return SE3(self._goal_pose) if self._goal_pose is not None else None
 
     @goal_pose.setter
     def goal_pose(self, pose):
@@ -149,7 +152,7 @@ class ManipulationPrimitive:
     def time_scaling(self, method):
         """Set a new time scaling method and update dependent parameters."""
         if method not in ["linear", "cubic", "quintic"]:
-            raise ValueError("Invalid time scaling method")
+            raise ValueError("Invalid time scaling method, choose from 'linear', 'cubic', or 'quintic'")
         self._time_scaling = method
         self._set_time_scaling(method)
         
@@ -197,26 +200,31 @@ class ManipulationPrimitive:
         elif method == "quintic":
             self.tau = rtb.quintic(q0=0, qf=1, t=tau).q
     
-    def _create_trajectory(self, start_dq, end_dq):
+    def _create_trajectory(self, 
+                           start_dq: SE3 | np.ndarray,
+                           goal_dq: SE3 | np.ndarray) -> list: 
+
         """
         Create a trajectory between two dual quaternions using ScLERP.
         
         Args:
-            start_dq (np.ndarray): Starting dual quaternion or SE3 pose.
-            end_dq (np.ndarray): Ending dual quaternion or SE3 pose.
+            start_dq (SE3 | np.ndarray): Starting dual quaternion or SE3 pose.
+            end_dq (SE3 | np.ndarray): Ending dual quaternion or SE3 pose.
             
         Returns:
             np.ndarray: Array of dual quaternions along the trajectory.
         """
         # Convert poses to dual quaternions if needed
         if isinstance(start_dq, SE3) or start_dq.shape == (4, 4):
-            start_dq = ptr3d.dual_quaternions_from_transforms(start_dq.A)
-            start_dq = pt3d.check_dual_quaternion(start_dq)
-        if isinstance(end_dq, SE3) or end_dq.shape == (4, 4):
-            end_dq = ptr3d.dual_quaternions_from_transforms(end_dq.A)
-            end_dq = pt3d.check_dual_quaternion(end_dq)
+            start_dq = ptr.dual_quaternions_from_transforms(start_dq)
+            start_dq = pt.check_dual_quaternion(start_dq)
+        if isinstance(goal_dq, SE3) or goal_dq.shape == (4, 4):
+            goal_dq = ptr.dual_quaternions_from_transforms(goal_dq)
+            goal_dq = pt.check_dual_quaternion(goal_dq)
         # Create trajectory using ScLERP
-        dq_traj = [ptr3d.dual_quaternions_sclerp(start_dq, end_dq, t) for t in self.tau]
+        dq_traj = np.vstack(
+            [ptr.dual_quaternions_sclerp(start_dq, goal_dq, t) for t in self.tau]
+        )
             
         return dq_traj
     
@@ -229,10 +237,9 @@ class ManipulationPrimitive:
         planned trajectory for both the object and the end-effector.
         
         Returns:
-            tuple: (object_poses, ee_poses) Lists of object and end-effector poses.
+            tuple: (object_poses, ee_poses) or (object_dqs, ee_dqs) Lists of object and end-effector poses.
         """
-        # Abstract method to be implemented by subclasses
-        raise NotImplementedError("Subclasses must implement this method")
+        
     
     def execute(self, update_object=True):
         """
@@ -249,8 +256,8 @@ class ManipulationPrimitive:
         self.object_poses, self.ee_poses = self.plan()
         
         # Convert poses to dual quaternions for smooth interpolation
-        self.object_dqs = [ptr3d.dual_quaternion_from_transform(pose.A) for pose in self.object_poses]
-        self.ee_dqs = [ptr3d.dual_quaternion_from_transform(pose.A) for pose in self.ee_poses]
+        self.object_dqs = [ptr.dual_quaternion_from_transform(pose.A) for pose in self.object_poses]
+        self.ee_dqs = [ptr.dual_quaternion_from_transform(pose.A) for pose in self.ee_poses]
         
         # Update object pose if requested
         if update_object:
